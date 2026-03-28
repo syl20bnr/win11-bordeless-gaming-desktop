@@ -26,11 +26,16 @@ This project now supports embedding a custom icon in the Windows `.exe` via `bui
    - https://github.com/microsoft/fluentui-system-icons/blob/main/assets/Panel%20Left%20Contract/SVG/ic_fluent_panel_left_contract_24_filled.svg
 2. Convert it to `.ico` (for example, 256x256).
 3. Add your icons as:
-   - `assets/taskbar-autohide-disabled.ico`
-   - `assets/taskbar-autohide-enabled.ico`
+   - `assets/taskbar-enable-autohide.ico`
+   - `assets/taskbar-disable-autohide.ico`
 4. Build on Windows with `cargo build --release`.
 
-`build.rs` embeds `assets/taskbar-autohide-disabled.ico` as the executable icon (with backward-compatible fallback to `assets/taskbar-autohide.ico`).
+`build.rs` embeds one of the new icons into the executable (with backward-compatible fallback to `assets/taskbar-autohide.ico`).
+
+At runtime, the app now updates the process icon dynamically before toggling:
+
+- If auto-hide is currently **off**, it shows the **enable auto-hide** icon.
+- If auto-hide is currently **on**, it shows the **disable auto-hide** icon.
 
 ## Usage
 

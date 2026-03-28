@@ -6,7 +6,7 @@ description = "Toggle Windows taskbar auto-hide using SHAppBarMessage"
 license = "MIT"
 
 [dependencies]
-windows = { version = "0.56", features = ["Win32_UI_Shell"] }
+windows = { version = "0.56", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
 winres = "0.1"
