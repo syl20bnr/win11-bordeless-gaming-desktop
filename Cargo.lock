@@ -1643,7 +1643,7 @@ dependencies = [
 
 [[package]]
 name = "win11-borderless-gaming-desktop"
-version = "1.2.0"
+version = "1.0.1"
 dependencies = [
  "windows",
  "winres",

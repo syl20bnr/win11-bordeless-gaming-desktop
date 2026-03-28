@@ -1,6 +1,6 @@
 use tracel_xtask::prelude::*;
 
-#[macros::base_commands(Check, Fix, Publish)]
+#[macros::base_commands(Bump, Check, Fix, Publish)]
 pub enum Command {}
 
 fn main() -> anyhow::Result<()> {

@@ -4,7 +4,7 @@ A tiny utility to make Windows cleaner for borderless gaming.
 
 ## Demo
 
-![Demo](https://github.com/syl20bnr/win11-borderless-gaming-desktop/blob/main/crates/win11-borderless-gaming-desktop/assets/demo.gif)
+![Demo](https://raw.githubusercontent.com/syl20bnr/win11-borderless-gaming-desktop/refs/heads/main/crates/win11-borderless-gaming-desktop/assets/demo.gif)
 
 ## Install
 
