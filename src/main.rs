@@ -1,8 +1,9 @@
 #[cfg(target_os = "windows")]
 mod app {
     use std::mem::size_of;
-    use windows::Win32::UI::Shell::{
-        APPBARDATA, ABS_AUTOHIDE, ABM_GETSTATE, ABM_SETSTATE, SHAppBarMessage,
+    use windows::Win32::{
+        Foundation::LPARAM,
+        UI::Shell::{SHAppBarMessage, ABM_GETSTATE, ABM_SETSTATE, ABS_AUTOHIDE, APPBARDATA},
     };
 
     pub fn run() {
@@ -12,15 +13,15 @@ mod app {
                 ..Default::default()
             };
 
-            let current_state = SHAppBarMessage(ABM_GETSTATE, Some(&mut appbar));
+            let current_state = SHAppBarMessage(ABM_GETSTATE, &mut appbar) as u32;
             let toggled_state = if current_state & ABS_AUTOHIDE != 0 {
                 current_state & !ABS_AUTOHIDE
             } else {
                 current_state | ABS_AUTOHIDE
             };
 
-            appbar.lParam = toggled_state as isize;
-            let _ = SHAppBarMessage(ABM_SETSTATE, Some(&mut appbar));
+            appbar.lParam = LPARAM(toggled_state as isize);
+            let _ = SHAppBarMessage(ABM_SETSTATE, &mut appbar);
         }
     }
 }

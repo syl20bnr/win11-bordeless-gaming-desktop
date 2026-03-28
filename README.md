@@ -25,10 +25,12 @@ This project now supports embedding a custom icon in the Windows `.exe` via `bui
 1. Download an icon/image from:
    - https://github.com/microsoft/fluentui-system-icons/blob/main/assets/Panel%20Left%20Contract/SVG/ic_fluent_panel_left_contract_24_filled.svg
 2. Convert it to `.ico` (for example, 256x256).
-3. Save it locally as `assets/taskbar-autohide.ico` (do not commit it if you want to keep it local-only).
+3. Add your icons as:
+   - `assets/taskbar-autohide-disabled.ico`
+   - `assets/taskbar-autohide-enabled.ico`
 4. Build on Windows with `cargo build --release`.
 
-If `assets/taskbar-autohide.ico` is missing, the build will continue without an embedded icon.
+`build.rs` embeds `assets/taskbar-autohide-disabled.ico` as the executable icon (with backward-compatible fallback to `assets/taskbar-autohide.ico`).
 
 ## Usage
 
