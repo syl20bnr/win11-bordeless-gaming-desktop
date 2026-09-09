@@ -33,6 +33,7 @@ use windows::{
 use crate::sound::{self, SoundCue};
 use crate::{
     app::{self, ToggleOptions},
+    audio::{self, OutputDevice, OutputSnapshot},
     behavior,
     display::{self, ChangeOutcome, DisplayError, Resolution},
 };
@@ -61,7 +62,7 @@ const WINDOW_WIDTH: f32 = 520.0;
 const MAIN_BOTTOM_INSET: i8 = 12;
 // Measured from the full rendered app so the application-behavior card keeps
 // a compact bottom inset in the fixed window.
-const WINDOW_HEIGHT: f32 = 688.0;
+const WINDOW_HEIGHT: f32 = 764.0;
 const TRANSPARENCY_CONTROL_HEIGHT: f32 = 66.0;
 const TRAY_OPEN_MENU_POSITION: u32 = 0;
 const WINDOW_SIZE: [f32; 2] = [WINDOW_WIDTH, WINDOW_HEIGHT];
@@ -142,6 +143,7 @@ fn window_icon() -> Option<egui::IconData> {
 #[serde(default)]
 struct FeatureChoices {
     change_resolution: bool,
+    change_output_device: bool,
     taskbar_auto_hide: bool,
     desktop_icons: bool,
     desktop_background: bool,
@@ -153,6 +155,7 @@ impl Default for FeatureChoices {
     fn default() -> Self {
         Self {
             change_resolution: true,
+            change_output_device: false,
             taskbar_auto_hide: true,
             desktop_icons: true,
             desktop_background: true,
@@ -219,6 +222,8 @@ struct Settings {
     taskbar_auto_hide_before_activation: Option<bool>,
     desktop_resolution: Option<Resolution>,
     gaming_resolution: Option<Resolution>,
+    gaming_output_device_id: Option<String>,
+    output_before_activation: Option<OutputSnapshot>,
     pending_resolution: Option<PendingResolution>,
     #[serde(default, skip_serializing, rename = "pending_resolution_target")]
     legacy_pending_resolution_target: Option<Resolution>,
@@ -245,6 +250,8 @@ impl Default for Settings {
             taskbar_auto_hide_before_activation: None,
             desktop_resolution: None,
             gaming_resolution: None,
+            gaming_output_device_id: None,
+            output_before_activation: None,
             pending_resolution: None,
             legacy_pending_resolution_target: None,
             sounds_enabled: true,
@@ -263,6 +270,7 @@ struct DurableModeState {
     active: bool,
     active_mode_features: Option<FeatureChoices>,
     taskbar_auto_hide_before_activation: Option<bool>,
+    output_before_activation: Option<OutputSnapshot>,
     pending_resolution: Option<PendingResolution>,
     #[serde(default, skip_serializing, rename = "pending_resolution_target")]
     legacy_pending_resolution_target: Option<Resolution>,
@@ -275,6 +283,7 @@ impl Default for DurableModeState {
             active: false,
             active_mode_features: None,
             taskbar_auto_hide_before_activation: None,
+            output_before_activation: None,
             pending_resolution: None,
             legacy_pending_resolution_target: None,
         }
@@ -288,6 +297,7 @@ impl DurableModeState {
             active: settings.gaming_mode_active,
             active_mode_features: settings.active_mode_features.clone(),
             taskbar_auto_hide_before_activation: settings.taskbar_auto_hide_before_activation,
+            output_before_activation: settings.output_before_activation.clone(),
             pending_resolution: settings.pending_resolution,
             legacy_pending_resolution_target: None,
         }
@@ -297,6 +307,7 @@ impl DurableModeState {
         settings.gaming_mode_active = self.active;
         settings.active_mode_features = self.active_mode_features.clone();
         settings.taskbar_auto_hide_before_activation = self.taskbar_auto_hide_before_activation;
+        settings.output_before_activation = self.output_before_activation.clone();
         settings.pending_resolution = self.pending_resolution;
         settings.legacy_pending_resolution_target = None;
     }
@@ -522,6 +533,18 @@ struct DisplayPicker {
     native: Option<Resolution>,
 }
 
+#[derive(Default)]
+struct AudioPicker {
+    devices: Vec<OutputDevice>,
+}
+
+impl AudioPicker {
+    fn load(&mut self) -> Result<(), String> {
+        self.devices = audio::output_devices()?;
+        Ok(())
+    }
+}
+
 struct ModeWordmark {
     texture: egui::TextureHandle,
     aspect_ratio: f32,
@@ -693,6 +716,7 @@ struct GuiApp {
     native_window: Option<HWND>,
     window_transparency_reapply_pending: bool,
     display: DisplayPicker,
+    audio: AudioPicker,
     mode_wordmarks: ModeWordmarks,
     errors: Vec<String>,
     pending_resolution: Option<(PendingResolution, String)>,
@@ -783,6 +807,10 @@ impl GuiApp {
         if let Err(error) = display.load(&mut settings) {
             errors.push(format!("Display modes are unavailable: {error}"));
         }
+        let mut audio = AudioPicker::default();
+        if let Err(error) = audio.load() {
+            errors.push(error);
+        }
 
         let mode_state = if gaming_mode {
             ModeVisualState::Gaming
@@ -808,6 +836,7 @@ impl GuiApp {
             // this pending while hidden would schedule needless repaint loops.
             window_transparency_reapply_pending: !start_minimized,
             display,
+            audio,
             mode_wordmarks,
             errors,
             pending_resolution,
@@ -873,6 +902,25 @@ impl GuiApp {
                 activation_choices(&self.settings.features, self.activation_changes_resolution);
             self.activation_changes_resolution = true;
             let previous_pending_resolution = self.settings.pending_resolution;
+            let previous_output_snapshot = self.settings.output_before_activation.clone();
+            if choices.change_output_device {
+                let Some(_) = self.settings.gaming_output_device_id else {
+                    self.errors
+                        .push("Choose a Gaming Mode output device first.".to_owned());
+                    self.begin_fixed_size_settle(context);
+                    return;
+                };
+                match audio::default_output_snapshot() {
+                    Ok(snapshot) => self.settings.output_before_activation = Some(snapshot),
+                    Err(error) => {
+                        self.errors.push(error);
+                        self.begin_fixed_size_settle(context);
+                        return;
+                    }
+                }
+            } else {
+                self.settings.output_before_activation = None;
+            }
             self.settings.gaming_mode_active = true;
             self.settings.active_mode_features = Some(choices.clone());
             self.settings.taskbar_auto_hide_before_activation = choices
@@ -891,6 +939,7 @@ impl GuiApp {
                 self.settings.active_mode_features = None;
                 self.settings.taskbar_auto_hide_before_activation = None;
                 self.settings.pending_resolution = previous_pending_resolution;
+                self.settings.output_before_activation = previous_output_snapshot;
                 self.errors.push(format!(
                     "Gaming Mode was not activated because its recovery state could not be saved: {error}"
                 ));
@@ -910,6 +959,28 @@ impl GuiApp {
         };
 
         let mut errors = report.errors;
+        let audio_result = if choices.change_output_device {
+            if was_enabled {
+                self.settings
+                    .output_before_activation
+                    .as_ref()
+                    .ok_or_else(|| {
+                        "Audio output: The original output device is unavailable.".to_owned()
+                    })
+                    .and_then(audio::restore_output)
+            } else {
+                self.settings
+                    .gaming_output_device_id
+                    .as_deref()
+                    .ok_or_else(|| "Audio output: No Gaming Mode device was selected.".to_owned())
+                    .and_then(audio::select_output)
+            }
+        } else {
+            Ok(())
+        };
+        if let Err(error) = audio_result {
+            errors.push(error);
+        }
         self.restore_actions_failed = was_enabled && !errors.is_empty();
         if self.restore_actions_failed {
             self.settings.active_mode_features = Some(choices.clone());
@@ -927,6 +998,7 @@ impl GuiApp {
             if was_enabled {
                 let original_taskbar_auto_hide = self.settings.taskbar_auto_hide_before_activation;
                 let previous_pending_resolution = self.settings.pending_resolution;
+                let original_output_snapshot = self.settings.output_before_activation.clone();
                 self.settings.gaming_mode_active = false;
                 self.settings.active_mode_features = None;
                 self.settings.taskbar_auto_hide_before_activation = None;
@@ -935,6 +1007,7 @@ impl GuiApp {
                     choices.change_resolution,
                     self.settings.desktop_resolution,
                 );
+                self.settings.output_before_activation = None;
 
                 // Windows actions are restored, but the app remains logically
                 // active until the Desktop state is durably committed.
@@ -943,6 +1016,7 @@ impl GuiApp {
                     self.settings.active_mode_features = Some(choices.clone());
                     self.settings.taskbar_auto_hide_before_activation = original_taskbar_auto_hide;
                     self.settings.pending_resolution = previous_pending_resolution;
+                    self.settings.output_before_activation = original_output_snapshot;
                     self.restore_actions_failed = true;
                     errors.push(format!(
                         "Windows was restored, but Desktop Mode could not be saved. Retry the restore: {error}"
@@ -1235,6 +1309,7 @@ impl GuiApp {
         frame: &mut eframe::Frame,
     ) {
         let previous_gaming_resolution = self.settings.gaming_resolution;
+        let previous_output_device = self.settings.gaming_output_device_id.clone();
         let resolutions = self.display.resolutions.clone();
         let available_resolutions = self.display.available_resolutions.clone();
         let native_resolution = self.display.native;
@@ -1289,6 +1364,21 @@ impl GuiApp {
                 &mut self.settings.gaming_resolution,
             );
 
+            ui.add_space(7.0);
+            ui.add_enabled_ui(!gaming_mode || self.restore_actions_failed, |ui| {
+                accent_checkbox(
+                    ui,
+                    &mut self.settings.features.change_output_device,
+                    "Change audio output:",
+                );
+            });
+            ui.add_space(3.0);
+            gaming_output_combo_box(
+                ui,
+                &self.audio.devices,
+                &mut self.settings.gaming_output_device_id,
+            );
+
             if gaming_mode && self.restore_actions_failed {
                 self.settings.active_mode_features = Some(self.settings.features.clone());
             }
@@ -1302,6 +1392,14 @@ impl GuiApp {
             if let Err(error) = self.persist_mode_state(frame) {
                 self.errors.push(format!(
                     "Could not save the updated Gaming resolution: {error}"
+                ));
+            }
+        }
+        if self.settings.gaming_output_device_id != previous_output_device {
+            self.errors.clear();
+            if let Err(error) = self.persist_mode_state(frame) {
+                self.errors.push(format!(
+                    "Could not save the updated Gaming audio output: {error}"
                 ));
             }
         }
@@ -1996,6 +2094,40 @@ fn gaming_resolution_combo_box(
                     ui.add_enabled_ui(available, |ui| {
                         ui.selectable_value(selection, Some(resolution), label);
                     });
+                }
+            });
+    });
+}
+
+fn gaming_output_combo_box(
+    ui: &mut egui::Ui,
+    devices: &[OutputDevice],
+    selection: &mut Option<String>,
+) {
+    let selected_text = selection.as_ref().map_or_else(
+        || "Select an output device".to_owned(),
+        |selected| {
+            devices
+                .iter()
+                .find(|device| &device.id == selected)
+                .map(|device| device.name.clone())
+                .unwrap_or_else(|| "Selected device (unavailable)".to_owned())
+        },
+    );
+
+    ui.scope(|ui| {
+        style_resolution_combo(ui);
+        egui::ComboBox::from_id_salt("gaming-output-combo")
+            .width(ui.available_width())
+            .selected_text(
+                RichText::new(selected_text)
+                    .size(13.5)
+                    .color(Color32::WHITE),
+            )
+            .popup_style(resolution_combo_popup_style())
+            .show_ui(ui, |ui| {
+                for device in devices {
+                    ui.selectable_value(selection, Some(device.id.clone()), &device.name);
                 }
             });
     });
@@ -2706,12 +2838,22 @@ mod tests {
     }
 
     #[test]
+    fn audio_output_changes_are_opt_in() {
+        assert!(!Settings::default().features.change_output_device);
+        assert!(Settings::default().gaming_output_device_id.is_none());
+    }
+
+    #[test]
     fn activation_without_resolution_preserves_every_other_configured_action() {
         let configured = FeatureChoices::default();
 
         let choices = activation_choices(&configured, false);
 
         assert!(!choices.change_resolution);
+        assert_eq!(
+            choices.change_output_device,
+            configured.change_output_device
+        );
         assert_eq!(choices.taskbar_auto_hide, configured.taskbar_auto_hide);
         assert_eq!(choices.desktop_icons, configured.desktop_icons);
         assert_eq!(choices.desktop_background, configured.desktop_background);
@@ -2894,6 +3036,12 @@ mod tests {
             active_mode_features: Some(FeatureChoices::default()),
             taskbar_auto_hide_before_activation: Some(true),
             gaming_resolution: Some(Resolution::new(3440, 1440)),
+            gaming_output_device_id: Some("gaming-speakers".to_owned()),
+            output_before_activation: Some(OutputSnapshot {
+                console: "desktop-console".to_owned(),
+                multimedia: "desktop-media".to_owned(),
+                communications: "desktop-comms".to_owned(),
+            }),
             pending_resolution: Some(PendingResolution::gaming(Resolution::new(3440, 1440))),
             ..Settings::default()
         };
@@ -2906,6 +3054,18 @@ mod tests {
         assert_eq!(
             restored.gaming_resolution,
             Some(Resolution::new(3440, 1440))
+        );
+        assert_eq!(
+            restored.gaming_output_device_id.as_deref(),
+            Some("gaming-speakers")
+        );
+        assert_eq!(
+            restored
+                .output_before_activation
+                .as_ref()
+                .unwrap()
+                .multimedia,
+            "desktop-media"
         );
         assert!(restored.active_mode_features.is_some());
         assert_eq!(restored.taskbar_auto_hide_before_activation, Some(true));
@@ -2932,6 +3092,11 @@ mod tests {
             active: true,
             active_mode_features: Some(FeatureChoices::default()),
             taskbar_auto_hide_before_activation: Some(false),
+            output_before_activation: Some(OutputSnapshot {
+                console: "desktop-console".to_owned(),
+                multimedia: "desktop-media".to_owned(),
+                communications: "desktop-comms".to_owned(),
+            }),
             pending_resolution: Some(PendingResolution::gaming(Resolution::new(2560, 1440))),
             ..DurableModeState::default()
         };
@@ -2943,6 +3108,10 @@ mod tests {
         assert!(restored.active);
         assert!(restored.active_mode_features.is_some());
         assert_eq!(restored.taskbar_auto_hide_before_activation, Some(false));
+        assert_eq!(
+            restored.output_before_activation.as_ref().unwrap().console,
+            "desktop-console"
+        );
         assert_eq!(
             restored.pending_resolution,
             Some(PendingResolution::gaming(Resolution::new(2560, 1440)))
@@ -3163,7 +3332,7 @@ mod tests {
 
     #[test]
     fn fixed_window_height_preserves_the_measured_outer_inset() {
-        assert_eq!(WINDOW_SIZE, [520.0, 688.0]);
+        assert_eq!(WINDOW_SIZE, [520.0, 764.0]);
     }
 
     #[test]

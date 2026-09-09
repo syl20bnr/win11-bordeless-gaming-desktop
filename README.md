@@ -55,6 +55,7 @@ opened it.
 Gaming Mode can:
 
 - switch the primary monitor to your chosen resolution when **Change resolution** is checked
+- switch Windows to a chosen audio output device, then restore the previous output in Desktop Mode
 - auto-hide the taskbar
 - hide desktop icons
 - replace the wallpaper with solid black
@@ -74,6 +75,7 @@ login launches, and window transparency have their own controls too.
 |                | Desktop Mode 🖥️               | Gaming Mode 🎮                |
 |----------------|--------------------------------|-------------------------------|
 | **Resolution** | Captured Desktop resolution    | Chosen Gaming resolution      |
+| **Audio output** | Previous output restored     | Chosen Gaming output          |
 | **Taskbar**    | Original setting restored      | Auto-hide when selected       |
 | **Desktop**    | Icons and wallpaper restored   | Selected cleanup actions      |
 | **Status LED** | Cool gray                      | Bright green                  |
