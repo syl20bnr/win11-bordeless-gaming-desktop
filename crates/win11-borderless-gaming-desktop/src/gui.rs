@@ -62,7 +62,7 @@ const WINDOW_WIDTH: f32 = 520.0;
 const MAIN_BOTTOM_INSET: i8 = 12;
 // Measured from the full rendered app so the application-behavior card keeps
 // a compact bottom inset in the fixed window.
-const WINDOW_HEIGHT: f32 = 764.0;
+const WINDOW_HEIGHT: f32 = 782.0;
 const TRANSPARENCY_CONTROL_HEIGHT: f32 = 66.0;
 const TRAY_OPEN_MENU_POSITION: u32 = 0;
 const WINDOW_SIZE: [f32; 2] = [WINDOW_WIDTH, WINDOW_HEIGHT];
