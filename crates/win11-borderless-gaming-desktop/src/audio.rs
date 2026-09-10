@@ -115,7 +115,11 @@ windows::core::imp::interface_hierarchy!(IPolicyConfigVista, windows::core::IUnk
 #[repr(C)]
 pub struct IPolicyConfigVista_Vtbl {
     base__: windows::core::IUnknown_Vtbl,
-    unused: [usize; 10],
+    // IPolicyConfigVista has nine methods between IUnknown and
+    // SetDefaultEndpoint. Unlike the newer IPolicyConfig interface, it does
+    // not have ResetDeviceFormat. Keeping the newer interface's ten-slot
+    // prefix here dispatches this call to SetEndpointVisibility instead.
+    unused: [usize; 9],
     set_default_endpoint: unsafe extern "system" fn(
         *mut core::ffi::c_void,
         PCWSTR,
@@ -162,4 +166,18 @@ pub(crate) fn restore_output(snapshot: &OutputSnapshot) -> Result<(), String> {
         &snapshot.multimedia,
         &snapshot.communications,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem::{offset_of, size_of};
+
+    #[test]
+    fn vista_policy_default_endpoint_uses_the_tenth_method_slot() {
+        assert_eq!(
+            offset_of!(IPolicyConfigVista_Vtbl, set_default_endpoint),
+            size_of::<windows::core::IUnknown_Vtbl>() + 9 * size_of::<usize>()
+        );
+    }
 }
